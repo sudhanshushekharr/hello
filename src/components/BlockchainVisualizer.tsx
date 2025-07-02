@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Transaction } from '../types/simulation';
 
 interface BlockchainVisualizerProps {
@@ -26,6 +26,7 @@ const BlockchainVisualizer: React.FC<BlockchainVisualizerProps> = ({
   const [broadcastStage, setBroadcastStage] = useState(0);
   const [showSmartContract, setShowSmartContract] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
+  const [replayTrigger, setReplayTrigger] = useState(0);
 
   // Initialize network nodes
   useEffect(() => {
@@ -40,56 +41,64 @@ const BlockchainVisualizer: React.FC<BlockchainVisualizerProps> = ({
     setNodes(initialNodes);
   }, []);
 
-  // Animate transaction broadcasting
+  // Animation sequence function
+  const runAnimationSequence = useCallback(() => {
+    setBroadcastStage(0);
+    setShowSmartContract(false);
+    setIsCompleted(false);
+    
+    // Reset nodes to idle
+    setNodes(prev => prev.map(node => ({ ...node, status: 'idle' })));
+    
+    // Stage 1: Start broadcasting
+    setTimeout(() => setBroadcastStage(1), 100);
+    
+    // Stage 2: Nodes start validating
+    setTimeout(() => {
+      setNodes(prev => prev.map(node => 
+        node.id !== 'smartcontract' 
+          ? { ...node, status: 'validating' }
+          : node
+      ));
+      setBroadcastStage(2);
+    }, 500);
+    
+    // Stage 3: Nodes confirm validation
+    setTimeout(() => {
+      setNodes(prev => prev.map(node => 
+        node.id !== 'smartcontract'
+          ? { ...node, status: 'confirmed' }
+          : node
+      ));
+      setBroadcastStage(3);
+    }, 2000);
+    
+    // Stage 4: Smart contract execution
+    setTimeout(() => {
+      setShowSmartContract(true);
+      setNodes(prev => prev.map(node => 
+        node.id === 'smartcontract'
+          ? { ...node, status: 'validating' }
+          : node
+      ));
+      setBroadcastStage(4);
+    }, 2500);
+    
+    // Stage 5: Complete
+    setTimeout(() => {
+      setNodes(prev => prev.map(node => ({ ...node, status: 'confirmed' })));
+      setBroadcastStage(5);
+      setIsCompleted(true);
+      onComplete?.();
+    }, 3500);
+  }, [onComplete]);
+
+  // Trigger animation on first load or replay
   useEffect(() => {
     if (isActive && currentTransaction) {
-      setBroadcastStage(0);
-      setShowSmartContract(false);
-      setIsCompleted(false);
-      
-      // Stage 1: Start broadcasting
-      setTimeout(() => setBroadcastStage(1), 100);
-      
-      // Stage 2: Nodes start validating
-      setTimeout(() => {
-        setNodes(prev => prev.map(node => 
-          node.id !== 'smartcontract' 
-            ? { ...node, status: 'validating' }
-            : node
-        ));
-        setBroadcastStage(2);
-      }, 500);
-      
-      // Stage 3: Nodes confirm validation
-      setTimeout(() => {
-        setNodes(prev => prev.map(node => 
-          node.id !== 'smartcontract'
-            ? { ...node, status: 'confirmed' }
-            : node
-        ));
-        setBroadcastStage(3);
-      }, 2000);
-      
-      // Stage 4: Smart contract execution
-      setTimeout(() => {
-        setShowSmartContract(true);
-        setNodes(prev => prev.map(node => 
-          node.id === 'smartcontract'
-            ? { ...node, status: 'validating' }
-            : node
-        ));
-        setBroadcastStage(4);
-      }, 2500);
-      
-      // Stage 5: Complete (but don't auto-close)
-      setTimeout(() => {
-        setNodes(prev => prev.map(node => ({ ...node, status: 'confirmed' })));
-        setBroadcastStage(5);
-        setIsCompleted(true);
-        onComplete?.();
-      }, 3500);
+      runAnimationSequence();
     }
-  }, [isActive, currentTransaction, onComplete]);
+  }, [isActive, currentTransaction, replayTrigger, runAnimationSequence]);
 
   // Reset when dialog is closed
   useEffect(() => {
@@ -98,8 +107,14 @@ const BlockchainVisualizer: React.FC<BlockchainVisualizerProps> = ({
       setBroadcastStage(0);
       setShowSmartContract(false);
       setIsCompleted(false);
+      setReplayTrigger(0);
     }
   }, [isActive]);
+
+  // Replay function
+  const handleReplay = () => {
+    setReplayTrigger(prev => prev + 1);
+  };
 
   if (!isActive) return null;
 
@@ -267,16 +282,7 @@ const BlockchainVisualizer: React.FC<BlockchainVisualizerProps> = ({
                       </p>
                     </div>
                     <button
-                      onClick={() => {
-                        // Reset animation to replay
-                        setBroadcastStage(0);
-                        setShowSmartContract(false);
-                        setIsCompleted(false);
-                        setNodes(prev => prev.map(node => ({ ...node, status: 'idle' })));
-                        
-                        // Restart animation
-                        setTimeout(() => setBroadcastStage(1), 100);
-                      }}
+                      onClick={handleReplay}
                       className="px-2 py-1 md:px-3 md:py-1 bg-green-600 text-white rounded text-xs md:text-sm hover:bg-green-700 transition-colors whitespace-nowrap ml-2"
                     >
                       🔄 Replay
@@ -342,13 +348,7 @@ const BlockchainVisualizer: React.FC<BlockchainVisualizerProps> = ({
             <div className="flex gap-3">
               {isCompleted && (
                 <button
-                  onClick={() => {
-                    setBroadcastStage(0);
-                    setShowSmartContract(false);
-                    setIsCompleted(false);
-                    setNodes(prev => prev.map(node => ({ ...node, status: 'idle' })));
-                    setTimeout(() => setBroadcastStage(1), 100);
-                  }}
+                  onClick={handleReplay}
                   className="px-3 py-2 md:px-4 md:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors text-sm"
                 >
                   🔄 Replay Animation
